@@ -2,32 +2,12 @@ package main
 
 import "core:fmt"
 import "core:strconv"
+import "core:unicode/utf8"
+
 
 Pair :: struct {
     arg1: int,
     arg2: int
-}
-
-MulState :: enum {
-    Mul,
-    Arg1,
-    Comma,
-    Arg2,
-    Close,
-}
-
-MulGroup :: struct {
-    active: bool,
-    start: int
-}
-
-is_number :: proc(s: rune) -> bool {
-    switch s {
-    case '0'..='9':
-        return true
-    }
-
-    return false
 }
 
 mult_and_sum :: proc(pairs: [dynamic]Pair) -> int {
@@ -40,107 +20,77 @@ mult_and_sum :: proc(pairs: [dynamic]Pair) -> int {
     return total
 }
 
+get_arg :: proc(s: string, idx: int, sep: rune) -> (num: int, total_size: int, ok: bool) {
+    current := idx
+    count: int
+ 
+    for current < len(s) && count < 4 {
+        rr, size := utf8.decode_rune_in_string(s[current:])
+        switch rr {
+        case '0'..='9':
+            count += 1
+            current += 1
+            total_size += size
+            continue
+        case sep:
+            total_size += size
+            return strconv.atoi(s[idx:current]), total_size, true
+        }
+        return 0, 0, false
+    }
+    return 0, 0, false
+}
 
 main :: proc() {
-    input := #load("example-input.txt", string)
+    input := #load("input.txt", string)
+    idx: int
 
     pairs: [dynamic]Pair
 
-    state: MulState
-    next: int
+    activate_keyword := "do()"
+    deactivate_keyword := "don't()"
+    mul_keyword := "mul("
 
-    mul_start := MulGroup { false, 0 }
-    mul_string := "mul("
-    mul_count: int
+    active := true
 
-    arg1_len: int
 
-    arg1: int
-    arg2: int
+    for idx < len(input) {
+        rr, size := utf8.decode_rune_in_string(input[idx:])
 
-    for ch, idx in input {
+        switch {
+        case rr == 'd':
+            act_idx := idx + len(activate_keyword)
+            dea_idx := idx + len(deactivate_keyword)
 
-        #partial switch state {
-        case .Mul:
-            if ch == 'm' && !mul_start.active {
-                mul_start = { true, idx }
+            switch {
+            case act_idx < len(input) && input[idx:act_idx] == activate_keyword:
+                active = true
+                idx += len(activate_keyword)
+                continue
+            case dea_idx < len(input) && input[idx:dea_idx] == deactivate_keyword:
+                active = false
+                idx += len(deactivate_keyword)
                 continue
             }
 
-            if mul_start.active {
-                mul_idx := idx - mul_start.start
-                if ch == rune(mul_string[mul_idx]) {
-                    if mul_idx == 3 {
-                        fmt.print(mul_string)
-                        mul_count += 1
-                        mul_start.active = false
-                        state = .Arg1
+        case active && rr == 'm':
+            mul_idx := idx + len(mul_keyword)
+
+            if mul_idx < len(input) && input[idx:mul_idx] == mul_keyword {
+                arg1, arg1_size, ok := get_arg(input, mul_idx, ','); if ok {
+                    arg2, arg2_size, ok2 := get_arg(input, mul_idx + arg1_size, ')'); if ok {
+                        idx = mul_idx + arg1_size + arg2_size
+                        append(&pairs, Pair {arg1, arg2})
                         continue
                     }
-                } else {
-                    // failed, but might be able to start again from here
-                    if ch == 'm' {
-                        mul_start.start = idx
-                        continue
-                    } else {
-                        mul_start.active = false
-                    }
-                }
-            }
-
-        case .Arg1:
-            if is_number(ch) {
-                arg1_len += 1
-                if arg1_len > 3 {
-                    arg1_len = 0
-                    state = .Mul
-                    continue
-                }
-            } else if ch == ',' && arg1_len > 0 {
-                fmt.print(input[idx - arg1_len:idx], ",")
-                arg1 = strconv.atoi(input[idx - arg1_len:idx])
-                arg1_len = 0
-                state = .Arg2
-                continue
-            } else {
-                arg1_len = 0
-                if ch == 'm' {
-                    state = .Mul
-                    mul_start = { true, idx }
-                    continue
-                } else {
-                    state = .Mul
-                    continue
-                }
-            }
-        case .Arg2:
-            if is_number(ch) {
-                arg1_len += 1
-                if arg1_len > 3 {
-                    arg1_len = 0
-                    state = .Mul
-                    continue
-                }
-            } else if ch == ')' && arg1_len > 0 {
-                fmt.println(input[idx - arg1_len:idx], ")")
-                arg2 = strconv.atoi(input[idx - arg1_len:idx])
-                arg1_len = 0
-                append(&pairs, Pair { arg1, arg2 })
-                state = .Mul
-                continue
-            } else {
-                arg1_len = 0
-                if ch == 'm' {
-                    state = .Mul
-                    mul_start = { true, idx }
-                    continue
-                } else {
-                    state = .Mul
-                    continue
                 }
             }
         }
+
+        idx += size
     }
 
-    fmt.println(mult_and_sum(pairs))
+    
+    total := mult_and_sum(pairs)
+    fmt.println("total is: ", total)
 }
