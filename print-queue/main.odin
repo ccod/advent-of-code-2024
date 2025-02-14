@@ -48,7 +48,54 @@ check :: proc(page: int, set: ^map[int]struct{}) -> bool {
     return true
 }
 
-main :: proc() {
+index_of_bad_page :: proc(source: []int, compare: []int) -> int {
+    for s, idx in source {
+        for c in compare {
+            if s == c {
+                return idx
+            }
+        }
+    }
+    return -1
+}
+
+reorder :: proc(pages: ^[dynamic]int) {
+    current: int
+    correct := false
+
+    for {
+        // run a pass and switch
+        for page, idx in pages {
+            if rule_list, ok := rules[page]; ok {
+                if bad_page_idx := index_of_bad_page(pages[:idx], rule_list[:]); bad_page_idx != -1 {
+                    temp := pages[bad_page_idx]
+                    pages[bad_page_idx] = page
+                    pages[idx] = temp
+                }
+            }
+        }
+        
+        // check that it satisfies
+        success := true 
+        set: map[int]struct{}
+
+        for page, idx in pages {
+            if check(page, &set) {
+                set[page] = {}
+            } else {
+                success = false
+                break
+            }
+        }
+
+        if success {
+            break
+        }
+    }
+}
+
+
+part_one :: proc() {
     input = #load("input.txt", string)
     lines := strings.split_lines(input)
 
@@ -86,4 +133,47 @@ main :: proc() {
     }
 
     fmt.println("count: ", count)
+}
+
+part_two :: proc() {
+    input = #load("input.txt", string)
+    lines := strings.split_lines(input)
+
+    count: int
+    rules_list := true
+
+    for line in lines {
+        switch {
+        case line == "":
+            rules_list = false
+        case rules_list:
+            add_rule(line)
+        case len(line) > 0 && !rules_list:
+            pages := list_pages(line)
+            set: map[int]struct{}
+
+            success := true
+
+            for page in pages {
+                if check(page, &set) {
+                    set[page] = {}
+                } else {
+                    success = false
+                    break
+                }
+            }
+
+            if !success {
+                reorder(&pages)
+                count += pages[len(pages)/2]
+            }
+        }
+    }
+
+    fmt.println("count: ", count)
+}
+
+main :: proc() {
+    //part_one()
+    part_two()
 }
